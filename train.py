@@ -1,6 +1,3 @@
-"""
-@author: Viet Nguyen <nhviet1009@gmail.com>
-"""
 import os
 import shutil
 from argparse import ArgumentParser
@@ -9,6 +6,8 @@ import torch
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+
+import wandb
 
 from src.model import SSD, SSDLite, ResNet, MobileNetV2
 from src.utils import generate_dboxes, Encoder, coco_classes
@@ -20,6 +19,11 @@ from src.dataset import collate_fn, CocoDataset
 
 def get_args():
     parser = ArgumentParser(description="Implementation of SSD")
+    # Add wandb specific arguments
+    parser.add_argument('--wandb', action='store_true', help='Enable wandb logging')
+    parser.add_argument('--wandb_project', type=str, default='your_project_name', help='wandb project name')
+    parser.add_argument('--wandb_entity', type=str, default='your_entity_name', help='wandb entity name')
+    # End wandb specific arguments
     parser.add_argument("--data-path", type=str, default="/coco",
                         help="the root folder of dataset")
     parser.add_argument("--save-folder", type=str, default="trained_models",
@@ -99,10 +103,10 @@ def main(opt):
             model, optimizer = amp.initialize(model, optimizer, opt_level='O1')
         else:
             from torch.nn.parallel import DistributedDataParallel as DDP
-        # It is recommended to use DistributedDataParallel, instead of DataParallel
-        # to do multi-GPU training, even if there is only a single node.
         model = DDP(model)
 
+    if opt.wandb:
+        wandb.init(project=opt.wandb_project, entity=opt.wandb_entity, config=opt)
 
     if os.path.isdir(opt.log_path):
         shutil.rmtree(opt.log_path)
@@ -124,7 +128,7 @@ def main(opt):
         first_epoch = 0
 
     for epoch in range(first_epoch, opt.epochs):
-        train(model, train_loader, epoch, writer, criterion, optimizer, scheduler, opt.amp)
+        train_loss = train(model, train_loader, epoch, writer, criterion, optimizer, scheduler, opt.amp)
         evaluate(model, test_loader, epoch, writer, encoder, opt.nms_threshold)
 
         checkpoint = {"epoch": epoch,
@@ -132,6 +136,11 @@ def main(opt):
                       "optimizer": optimizer.state_dict(),
                       "scheduler": scheduler.state_dict()}
         torch.save(checkpoint, checkpoint_path)
+        wandb.log({"epoch": epoch, "train_loss": train_loss})
+        wandb.save(checkpoint_path)
+
+    if opt.wandb:
+        wandb.finish()
 
 
 if __name__ == "__main__":
