@@ -1,14 +1,12 @@
-"""
-@author: Viet Nguyen <nhviet1009@gmail.com>
-"""
 import numpy as np
 from tqdm.autonotebook import tqdm
 import torch
 from pycocotools.cocoeval import COCOeval
 from apex import amp
+import wandb
 
 
-def train(model, train_loader, epoch, writer, criterion, optimizer, scheduler, is_amp):
+def train(model, train_loader, epoch, wandb_run, criterion, optimizer, scheduler, is_amp):
     model.train()
     num_iter_per_epoch = len(train_loader)
     progress_bar = tqdm(train_loader)
@@ -26,7 +24,7 @@ def train(model, train_loader, epoch, writer, criterion, optimizer, scheduler, i
 
         progress_bar.set_description("Epoch: {}. Loss: {:.5f}".format(epoch + 1, loss.item()))
 
-        writer.add_scalar("Train/Loss", loss.item(), epoch * num_iter_per_epoch + i)
+        wandb.log({"Train/Loss": loss.item(), "epoch": epoch * num_iter_per_epoch + i})
 
         if is_amp:
             with amp.scale_loss(loss, optimizer) as scale_loss:
@@ -37,7 +35,7 @@ def train(model, train_loader, epoch, writer, criterion, optimizer, scheduler, i
         optimizer.zero_grad()
 
 
-def evaluate(model, test_loader, epoch, writer, encoder, nms_threshold):
+def evaluate(model, test_loader, epoch, wandb_run, encoder, nms_threshold):
     model.eval()
     detections = []
     category_ids = test_loader.dataset.coco.getCatIds()
@@ -71,6 +69,14 @@ def evaluate(model, test_loader, epoch, writer, encoder, nms_threshold):
     coco_eval = COCOeval(test_loader.dataset.coco, test_loader.dataset.coco.loadRes(detections), iouType="bbox")
     coco_eval.evaluate()
     coco_eval.accumulate()
-    coco_eval.summarize()
 
-    writer.add_scalar("Test/mAP", coco_eval.stats[0], epoch)
+    # Logging all mAP metrics using wandb
+    wandb.log({"Test/mAP": coco_eval.stats[0], "epoch": epoch})
+    wandb.log({"Test/mAP_50": coco_eval.stats[1], "epoch": epoch})
+    wandb.log({"Test/mAP_75": coco_eval.stats[2], "epoch": epoch})
+    wandb.log({"Test/mAP_small": coco_eval.stats[3], "epoch": epoch})
+    wandb.log({"Test/mAP_medium": coco_eval.stats[4], "epoch": epoch})
+    wandb.log({"Test/mAP_large": coco_eval.stats[5], "epoch": epoch})
+
+    # Summarize mAP
+    coco_eval.summarize()
