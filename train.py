@@ -48,6 +48,8 @@ def get_args():
                         help='Used for multi-process training. Can either be manually set ' +
                              'or automatically set by using \'python -m multiproc\'.')
     args = parser.parse_args()
+    if args.local_rank is None:
+        args.local_rank = int(os.environ['LOCAL_RANK'])
     return args
 
 
