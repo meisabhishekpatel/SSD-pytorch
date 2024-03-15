@@ -129,14 +129,14 @@ def main(opt):
 
     for epoch in range(first_epoch, opt.epochs):
         train_loss = train(model, train_loader, epoch, writer, criterion, optimizer, scheduler, opt.amp)
-        evaluate(model, test_loader, epoch, writer, encoder, opt.nms_threshold)
+        accuracy = evaluate(model, test_loader, epoch, writer, encoder, opt.nms_threshold)
 
         checkpoint = {"epoch": epoch,
                       "model_state_dict": model.module.state_dict(),
                       "optimizer": optimizer.state_dict(),
                       "scheduler": scheduler.state_dict()}
         torch.save(checkpoint, checkpoint_path)
-        wandb.log({"epoch": epoch, "train_loss": train_loss})
+        wandb.log({"epoch": epoch, "train_loss": train_loss, "accuracy": accuracy})
         wandb.save(checkpoint_path)
 
     if opt.wandb:
