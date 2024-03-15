@@ -9,7 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 import wandb
 
-from src.model import SSD, SSDLite, ResNet, MobileNetV2
+from src.model import SSD, ResNet
 from src.utils import generate_dboxes, Encoder, coco_classes
 from src.transform import SSDTransformer
 from src.loss import Loss
