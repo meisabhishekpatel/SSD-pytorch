@@ -1,9 +1,6 @@
-"""
-@author: Viet Nguyen <nhviet1009@gmail.com>
-"""
 import torch
 import torch.nn as nn
-from torchvision.models.resnet import resnet50
+from torchvision.models.resnet import resnet18
 from torchvision.models.mobilenet import mobilenet_v2, InvertedResidual
 
 class Base(nn.Module):
@@ -30,8 +27,8 @@ class Base(nn.Module):
 class ResNet(nn.Module):
     def __init__(self):
         super().__init__()
-        backbone = resnet50(pretrained=True)
-        self.out_channels = [1024, 512, 512, 256, 256, 256]
+        backbone = resnet18(pretrained=True)  # Use ResNet-18 instead of ResNet-50
+        self.out_channels = [64, 64, 128, 256, 512]
         self.feature_extractor = nn.Sequential(*list(backbone.children())[:7])
 
         conv4_block1 = self.feature_extractor[-1][0]
@@ -51,7 +48,7 @@ class SSD(Base):
         self.feature_extractor = backbone
         self.num_classes = num_classes
         self._build_additional_features(self.feature_extractor.out_channels)
-        self.num_defaults = [4, 6, 6, 6, 4, 4]
+        self.num_defaults = [4, 6, 6, 6, 4]
         self.loc = []
         self.conf = []
 
@@ -66,7 +63,7 @@ class SSD(Base):
     def _build_additional_features(self, input_size):
         self.additional_blocks = []
         for i, (input_size, output_size, channels) in enumerate(
-                zip(input_size[:-1], input_size[1:], [256, 256, 128, 128, 128])):
+                zip(input_size[:-1], input_size[1:], [256, 128, 64, 64])):
             if i < 3:
                 layer = nn.Sequential(
                     nn.Conv2d(input_size, channels, kernel_size=1, bias=False),
@@ -90,7 +87,6 @@ class SSD(Base):
 
         self.additional_blocks = nn.ModuleList(self.additional_blocks)
 
-
     def forward(self, x):
         x = self.feature_extractor(x)
         detection_feed = [x]
@@ -100,9 +96,7 @@ class SSD(Base):
         locs, confs = self.bbox_view(detection_feed, self.loc, self.conf)
         return locs, confs
 
-
 feature_maps = {}
-
 
 class MobileNetV2(nn.Module):
     def __init__(self):
@@ -120,7 +114,6 @@ class MobileNetV2(nn.Module):
         x = self.feature_extractor(x)
         return feature_maps[0], x
 
-
 def SeperableConv2d(in_channels, out_channels, kernel_size=3):
     padding = (kernel_size - 1) // 2
     return nn.Sequential(
@@ -131,13 +124,11 @@ def SeperableConv2d(in_channels, out_channels, kernel_size=3):
         nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1),
     )
 
-
 def StackedSeperableConv2d(ls_channels, multiplier):
     out_channels = 6 * multiplier
     layers = [SeperableConv2d(in_channels=in_channels, out_channels=out_channels) for in_channels in ls_channels]
     layers.append(nn.Conv2d(in_channels=ls_channels[-1], out_channels=out_channels, kernel_size=1))
     return nn.ModuleList(layers)
-
 
 class SSDLite(Base):
     def __init__(self, backbone=MobileNetV2(), num_classes=81, width_mul=1.0):
@@ -155,7 +146,6 @@ class SSDLite(Base):
         self.loc = StackedSeperableConv2d(header_channels, 4)
         self.conf = StackedSeperableConv2d(header_channels, self.num_classes)
         self.init_weights()
-
 
     def forward(self, x):
         y, x = self.feature_extractor(x)
